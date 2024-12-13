@@ -1,0 +1,25 @@
+# Node.js modülleri
+node_modules/
+
+# Çıkış dosyaları ve geçici dosyalar
+dist/
+build/
+*.log
+*.tmp
+
+# Çevresel değişken dosyaları
+.env
+
+# IDE ve editör dosyaları
+.vscode/
+.idea/
+*.swp
+
+# İşletim sistemi dosyaları
+.DS_Store
+Thumbs.db
+
+# Diğer
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
