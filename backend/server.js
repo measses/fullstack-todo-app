@@ -1,73 +1,84 @@
-const express = require('express');
-const cors = require('cors');
-const dotenv = require('dotenv');
+const express = require("express");
+const cors = require("cors");
+const dotenv = require("dotenv");
+const db = require("./db/knex");
 
-// Çevre değişkenlerini yükle
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5001;
 
 // Middleware
-app.use(cors({
-    origin: 'http://localhost:5173',
-    methods: ['GET', 'POST', 'DELETE'],
-    allowedHeaders: ['Content-Type']
-}));
+app.use(
+  cors({
+    origin: process.env.ALLOWED_ORIGIN, // .env'den IP alınıyor
+    methods: ["GET", "POST", "DELETE"], // Desteklenen HTTP metodları
+    allowedHeaders: ["Content-Type"], // Desteklenen header'lar
+  })
+);
 app.use(express.json());
 
 // Health Check endpoint
-app.get('/health', (req, res) => {
+app.get("/health", async (req, res) => {
+  try {
+    // Veritabanına basit bir sorgu göndererek bağlantıyı kontrol et
+    await db.raw("SELECT 1+1 AS result");
     res.status(200).json({
-        status: 'up',
-        timestamp: new Date(),
-        uptime: process.uptime(),
-        message: 'Server is healthy'
+      status: "up",
+      message: "Server and database are healthy",
+      timestamp: new Date(),
+      uptime: process.uptime(),
     });
+  } catch (error) {
+    res.status(500).json({
+      status: "down",
+      message: "Database connection failed",
+      error: error.message,
+    });
+  }
 });
 
-// In-memory todos array (Gerçek uygulamada bir veritabanı kullanılmalı)
-let todos = [];
-let nextId = 1;
-
-// GET /todos - Tüm todoları getir
-app.get('/todos', (req, res) => {
+// GET /todos
+app.get("/todos", async (req, res) => {
+  try {
+    const todos = await db("todos").select("*").orderBy("id");
     res.json(todos);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-// POST /todos - Yeni todo ekle
-app.post('/todos', (req, res) => {
-    const { text } = req.body;
-    
-    if (!text) {
-        return res.status(400).json({ error: 'Text alanı zorunludur' });
-    }
+// POST /todos
+app.post("/todos", async (req, res) => {
+  const { text } = req.body;
 
-    const newTodo = {
-        id: nextId++,
-        text,
-        completed: false,
-        createdAt: new Date()
-    };
+  if (!text) {
+    return res.status(400).json({ error: "Text alanı zorunludur" });
+  }
 
-    todos.push(newTodo);
-    res.status(201).json(todos);
+  try {
+    const [newTodo] = await db("todos").insert({ text }).returning("*");
+    res.status(201).json(newTodo);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-// DELETE /todos/:id - Todo sil
-app.delete('/todos/:id', (req, res) => {
-    const id = parseInt(req.params.id);
-    const initialLength = todos.length;
-    
-    todos = todos.filter(todo => todo.id !== id);
-    
-    if (todos.length === initialLength) {
-        return res.status(404).json({ error: 'Todo bulunamadı' });
+// DELETE /todos/:id
+app.delete("/todos/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const deletedTodo = await db("todos").where({ id }).del().returning("*");
+    if (!deletedTodo.length) {
+      return res.status(404).json({ error: "Todo bulunamadı" });
     }
-    
-    res.json(todos);
+    res.json(deletedTodo[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+  console.log(`Server is running on port ${PORT}`);
 });
